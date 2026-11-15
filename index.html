@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Loch für Loch – Minigolf Clicker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;700;800&display=swap">
+<style>
+:root{--sky:#2b3a67;--ink:#1d2540;--grass:#6fbf73;--sand:#f2d49b;--flag:#ff6b5e;--gold:#ffd166;--card:#34447a;--text:#fdf6e3;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--ink);color:var(--text);font-family:"Bricolage Grotesque",system-ui,sans-serif;min-height:100vh;display:flex;justify-content:center}
+main{width:100%;max-width:440px;padding:16px}
+h1{font-size:1.5rem;font-weight:800;margin:0 0 2px;letter-spacing:-.02em}
+.sub{margin:0 0 12px;opacity:.75;font-size:.9rem}
+.stats{display:flex;gap:10px;margin-bottom:10px}
+.stat{flex:1;background:var(--card);border-radius:14px;padding:8px 12px}
+.stat b{display:block;font-size:1.35rem;font-weight:800;color:var(--gold)}
+.stat span{font-size:.8rem;opacity:.8}
+canvas{width:100%;height:auto;display:block;border-radius:18px;cursor:pointer;touch-action:manipulation;background:var(--sky)}
+.putt{width:100%;margin:10px 0 14px;padding:14px;border:0;border-radius:14px;background:var(--flag);color:#fff;font:800 1.15rem "Bricolage Grotesque",system-ui,sans-serif;cursor:pointer;box-shadow:0 5px 0 #c24a40}
+.putt:active{transform:translateY(4px);box-shadow:0 1px 0 #c24a40}
+.putt:focus-visible,.up:focus-visible,.reset:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.ups{display:grid;gap:8px}
+.up{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;width:100%;background:var(--card);color:var(--text);border:2px solid transparent;border-radius:14px;padding:10px 12px;font:inherit;cursor:pointer}
+.up:disabled{opacity:.45;cursor:not-allowed}
+.up:not(:disabled){border-color:var(--grass)}
+.up strong{display:block;font-size:1rem}
+.up small{opacity:.8;font-size:.8rem}
+.cost{font-weight:800;color:var(--gold);white-space:nowrap}
+.reset{margin-top:14px;background:none;border:0;color:var(--text);opacity:.5;font:inherit;font-size:.8rem;cursor:pointer;text-decoration:underline}
+h2{font-size:1.1rem;font-weight:800;margin:20px 0 8px}
+.acct{background:var(--card);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:.9rem}
+.acct .row{display:flex;gap:8px}
+.acct input{flex:1;min-width:0;padding:9px 10px;border-radius:10px;border:2px solid transparent;background:var(--ink);color:var(--text);font:inherit}
+.acct input:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
+.acct button{border:0;border-radius:10px;padding:9px 14px;background:var(--grass);color:#12301a;font:800 .9rem "Bricolage Grotesque",system-ui,sans-serif;cursor:pointer}
+.acct button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.acct p{margin:6px 0 0;opacity:.75;font-size:.8rem}
+.acct .who{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.board{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.board li{display:grid;grid-template-columns:1.6rem 1fr auto;gap:8px;align-items:center;background:var(--card);border-radius:12px;padding:8px 12px}
+.board li.me{border:2px solid var(--gold)}
+.board .nm{font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board small{display:block;font-weight:400;opacity:.75;font-size:.75rem}
+.board .pts{font-weight:800;color:var(--gold);white-space:nowrap}
+.ver{opacity:.4;font-size:.75rem;margin:8px 0 0}
+.empty{opacity:.75;font-size:.9rem}
+@media (prefers-reduced-motion:reduce){.putt{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Loch für Loch</h1>
+  <p class="sub">Klick aufs Grün und lass die Bälle einlochen.</p>
+  <div class="acct" id="acct"></div>
+  <div class="stats">
+    <div class="stat"><b id="coins">0</b><span>Münzen</span></div>
+    <div class="stat"><b id="rate">0</b><span>pro Sekunde</span></div>
+    <div class="stat"><b id="holes">0</b><span>Löcher</span></div>
+  </div>
+  <canvas id="c" width="360" height="220" aria-label="Minigolf-Bahn"></canvas>
+  <button class="putt" id="putt">Putten</button>
+  <div class="ups" id="ups"></div>
+  <h2>Bestenliste</h2>
+  <ol class="board" id="board"></ol>
+  <button class="reset" id="reset">Spielstand löschen</button>
+  <p class="ver">Version 3</p>
+</main>
+<script>
+(function(){
+var fmt=new Intl.NumberFormat("de-DE",{maximumFractionDigits:1});
+var KEY="loch-fuer-loch-v1";
+var UPS=[
+ {id:"club",name:"Schläger-Tuning",desc:"+1 Münze pro Putt",base:15,grow:1.35},
+ {id:"caddie",name:"Caddie",desc:"Putt automatisch, 1× pro Sekunde",base:50,grow:1.4},
+ {id:"clover",name:"Glücksklee",desc:"+3 % Chance auf Hole-in-One (5-fach)",base:120,grow:1.6,max:15},
+ {id:"course",name:"Besserer Platz",desc:"+25 % Münzen auf alles",base:400,grow:2.1}
+];
+function norm(o){
+  o=o||{};
+  o.lv=Object.assign({club:0,caddie:0,clover:0,course:0},o.lv||{});
+  o.coins=+o.coins||0;o.holes=+o.holes||0;o.aces=+o.aces||0;o.earned=+o.earned||0;
+  return o;
+}
+var S=norm({});
+try{if(localStorage.getItem("loch-reset")!=="2"){localStorage.removeItem(KEY);localStorage.removeItem("loch-players-v1");localStorage.removeItem("loch-name");localStorage.setItem("loch-reset","2");}}catch(e){}
+var store=null,myKey=null,myName=null,dirty=false,saving=false,NAMEKEY="loch-name";
+function keyOf(n){
+  var k=n.trim().toLowerCase().replace(/\s+/g," "),o="";
+  for(var i=0;i<k.length;i++){var ch=k[i];o+=/[a-z0-9_-]/.test(ch)?ch:"~"+k.charCodeAt(i).toString(16);}
+  return o.slice(0,150);
+}
+function save(){
+  if(!myKey)return;
+  if(!store||!dirty||saving)return;
+  saving=true;dirty=false;
+  store.set(myKey,{name:myName,coins:S.coins,holes:S.holes,aces:S.aces,earned:S.earned,lv:S.lv,updated:Date.now()})
+    .then(function(){saving=false;},function(){saving=true;dirty=true;saving=false;setNote("Speichern gerade nicht möglich. Ich versuche es gleich noch einmal.");});
+}
+
+var cv=document.getElementById("c"),g=cv.getContext("2d");
+var TEE={x:70,y:178},HOLE={x:288,y:166};
+var balls=[],pops=[],flagWiggle=0,acc=0,last=performance.now();
+
+function perPutt(){return (1+S.lv.club)*(1+0.25*S.lv.course);}
+function critChance(){return 0.05+0.03*S.lv.clover;}
+function rate(){return S.lv.caddie*perPutt()*(1+critChance()*4);}
+function cost(u){return Math.ceil(u.base*Math.pow(u.grow,S.lv[u.id]));}
+
+function putt(){balls.push({t:0,speed:1.3+Math.random()*0.4,crit:Math.random()<critChance(),off:(Math.random()-.5)*10});}
+
+function land(b){
+  var v=perPutt()*(b.crit?5:1);
+  S.coins+=v;S.earned+=v;S.holes++;if(b.crit)S.aces++;dirty=true;flagWiggle=1;
+  pops.push({x:HOLE.x,y:HOLE.y-30,t:0,text:(b.crit?"Hole-in-One! +":"+")+fmt.format(v),crit:b.crit});
+  update();
+}
+
+function draw(dt){
+  var w=360,h=220,i;
+  var sky=g.createLinearGradient(0,0,0,h);sky.addColorStop(0,"#2b3a67");sky.addColorStop(1,"#f08a6b");
+  g.fillStyle=sky;g.fillRect(0,0,w,h);
+  g.fillStyle="#ffd166";g.beginPath();g.arc(300,62,26,0,7);g.fill();
+  g.fillStyle="#3d5a80";g.beginPath();g.moveTo(0,150);g.quadraticCurveTo(80,95,170,140);g.quadraticCurveTo(250,100,360,145);g.lineTo(360,220);g.lineTo(0,220);g.fill();
+  g.fillStyle="#4c9a5b";g.fillRect(0,170,w,50);
+  g.fillStyle="#6fbf73";g.beginPath();g.ellipse(180,180,165,32,0,0,7);g.fill();
+  g.fillStyle="#f2d49b";g.beginPath();g.ellipse(250,200,38,9,0,0,7);g.fill();
+  g.fillStyle="#7a4b2a";g.fillRect(36,118,6,26);g.fillStyle="#2f7d4a";g.beginPath();g.arc(39,112,17,0,7);g.fill();
+  g.fillStyle="#1d2540";g.beginPath();g.ellipse(HOLE.x,HOLE.y+4,9,4,0,0,7);g.fill();
+  flagWiggle=Math.max(0,flagWiggle-dt*1.5);
+  var wob=Math.sin(performance.now()/60)*6*flagWiggle;
+  g.strokeStyle="#fdf6e3";g.lineWidth=2;g.beginPath();g.moveTo(HOLE.x,HOLE.y+2);g.lineTo(HOLE.x,HOLE.y-44);g.stroke();
+  g.fillStyle="#ff6b5e";g.beginPath();g.moveTo(HOLE.x,HOLE.y-44);g.lineTo(HOLE.x+24+wob,HOLE.y-37);g.lineTo(HOLE.x,HOLE.y-30);g.fill();
+  g.fillStyle="#fdf6e3";g.beginPath();g.arc(TEE.x,TEE.y,5,0,7);g.fill();
+  for(i=balls.length-1;i>=0;i--){
+    var b=balls[i];b.t+=dt*b.speed;
+    if(b.t>=1){land(b);balls.splice(i,1);continue;}
+    var t=b.t,x=TEE.x+(HOLE.x-TEE.x)*t,y=TEE.y+(HOLE.y-TEE.y)*t+Math.sin(t*Math.PI)*b.off-Math.sin(t*Math.PI)*8;
+    var r=t>.9?5*(1-(t-.9)*7):5;
+    g.fillStyle="rgba(0,0,0,.25)";g.beginPath();g.ellipse(x,y+5,r,2,0,0,7);g.fill();
+    g.fillStyle=b.crit?"#ffd166":"#fdf6e3";g.beginPath();g.arc(x,y,Math.max(r,1),0,7);g.fill();
+  }
+  g.textAlign="center";g.font="800 16px 'Bricolage Grotesque',system-ui,sans-serif";
+  for(i=pops.length-1;i>=0;i--){
+    var p=pops[i];p.t+=dt;
+    if(p.t>1){pops.splice(i,1);continue;}
+    g.globalAlpha=1-p.t;g.fillStyle=p.crit?"#ffd166":"#fdf6e3";
+    g.fillText(p.text,p.x-(p.crit?40:0),p.y-p.t*28);
+  }
+  g.globalAlpha=1;
+}
+
+var coinsEl=document.getElementById("coins"),rateEl=document.getElementById("rate"),holesEl=document.getElementById("holes"),upsEl=document.getElementById("ups");
+var btns={};
+UPS.forEach(function(u){
+  var b=document.createElement("button");b.className="up";
+  b.innerHTML='<span><strong></strong><small></small></span><span class="cost"></span>';
+  b.addEventListener("click",function(){
+    var c=cost(u);if(S.coins>=c&&!(u.max&&S.lv[u.id]>=u.max)){S.coins-=c;S.lv[u.id]++;dirty=true;update();}
+  });
+  upsEl.appendChild(b);btns[u.id]=b;
+});
+function update(){
+  coinsEl.textContent=fmt.format(Math.floor(S.coins));
+  rateEl.textContent=fmt.format(rate());
+  holesEl.textContent=fmt.format(S.holes);
+  UPS.forEach(function(u){
+    var b=btns[u.id],lv=S.lv[u.id],maxed=u.max&&lv>=u.max,c=cost(u);
+    b.querySelector("strong").textContent=u.name+" (Stufe "+lv+")";
+    b.querySelector("small").textContent=u.desc;
+    b.querySelector(".cost").textContent=maxed?"Maximal":fmt.format(c)+" Münzen";
+    b.disabled=maxed||S.coins<c;
+  });
+}
+
+var acctEl=document.getElementById("acct"),boardEl=document.getElementById("board"),noteMsg="";
+function setNote(t){noteMsg=t;var n=document.getElementById("note");if(n)n.textContent=t;}
+function renderAcct(){
+  acctEl.textContent="";
+  if(!store){return;}
+  if(myKey){
+    var w=document.createElement("div");w.className="who";
+    var sp=document.createElement("span");sp.textContent="Angemeldet als ";var b=document.createElement("strong");b.textContent=myName;sp.appendChild(b);
+    var out=document.createElement("button");out.textContent="Abmelden";out.addEventListener("click",logout);
+    w.appendChild(sp);w.appendChild(out);acctEl.appendChild(w);
+  }else{
+    var r=document.createElement("div");r.className="row";
+    var inp=document.createElement("input");inp.id="nm";inp.maxLength=20;inp.placeholder="Dein Name";inp.setAttribute("aria-label","Dein Name");
+    var bt=document.createElement("button");bt.textContent="Anmelden";
+    var go=function(){login(inp.value);};
+    bt.addEventListener("click",go);inp.addEventListener("keydown",function(e){if(e.key==="Enter")go();});
+    r.appendChild(inp);r.appendChild(bt);acctEl.appendChild(r);
+    var q=document.createElement("p");q.textContent="Du spielst als Gast. Dieser Stand wird nicht gespeichert und beginnt bei jedem Öffnen bei 0. Melde dich mit einem Namen an, um deinen Spielstand zu speichern"+(store.kind==="local"?" (gilt nur für diesen Browser).":".");acctEl.appendChild(q);
+  }
+  var n=document.createElement("p");n.id="note";n.textContent=noteMsg;acctEl.appendChild(n);
+}
+function login(name){
+  name=(name||"").trim().replace(/\s+/g," ");
+  if(!store)return;
+  if(!name){setNote("Bitte gib einen Namen ein.");return;}
+  var key=keyOf(name);
+  store.get(key).then(function(data){
+    S=data?norm(data):norm({});
+    myKey=key;myName=data&&data.name?data.name:name;dirty=true;
+        noteMsg="";renderAcct();update();save();
+  },function(){setNote("Anmeldung fehlgeschlagen. Bitte versuche es noch einmal.");});
+}
+function logout(){
+  save();myKey=null;myName=null;
+  try{localStorage.removeItem(NAMEKEY);}catch(e){}
+  S=norm({});
+  renderAcct();update();
+}
+function renderBoard(docs){
+  boardEl.textContent="";
+  if(!docs.length){var li=document.createElement("li");li.className="empty";li.textContent="Noch keine Einträge. Melde dich an und lege los.";li.style.display="block";boardEl.appendChild(li);return;}
+  docs.forEach(function(d,i){
+    var x=d.data()||{},li=document.createElement("li");
+    if(d.id===myKey)li.className="me";
+    var rk=document.createElement("span");rk.textContent=(i+1)+".";
+    var nm=document.createElement("span");nm.className="nm";nm.textContent=x.name||"Unbekannt";
+    var sm=document.createElement("small");sm.textContent=fmt.format(x.holes||0)+" Löcher, "+fmt.format(x.aces||0)+" Hole-in-One";nm.appendChild(sm);
+    var pt=document.createElement("span");pt.className="pts";pt.textContent=fmt.format(Math.floor(x.earned||0))+" Münzen";
+    li.appendChild(rk);li.appendChild(nm);li.appendChild(pt);boardEl.appendChild(li);
+  });
+}
+var localCb=null,PKEY="loch-players-v1";
+function readPlayers(){try{return JSON.parse(localStorage.getItem(PKEY)||"{}")||{};}catch(e){return {};}}
+function localDocs(){
+  var m=readPlayers();
+  return Object.keys(m).map(function(k){return {id:k,data:function(){return m[k];}};})
+    .sort(function(x,y){return (y.data().earned||0)-(x.data().earned||0);}).slice(0,10);
+}
+var localStore={kind:"local",
+  get:function(k){return Promise.resolve(readPlayers()[k]||null);},
+  set:function(k,v){var m=readPlayers();m[k]=v;try{localStorage.setItem(PKEY,JSON.stringify(m));}catch(e){}if(localCb)localCb(localDocs());return Promise.resolve();},
+  watch:function(cb){localCb=cb;cb(localDocs());}
+};
+function onlineStore(d){return {kind:"online",
+  get:function(k){return d.collection("players").doc(k).get().then(function(sn){return sn.exists?JSON.parse(JSON.stringify(sn.data())):null;});},
+  set:function(k,v){return d.collection("players").doc(k).set(v);},
+  watch:function(cb,err){d.collection("players").orderBy("earned","desc").limit(10).onSnapshot(function(sn){cb(sn.docs);},err);}
+};}
+function pick(d){
+  store=d?onlineStore(d):localStore;
+  renderAcct();
+  try{store.watch(renderBoard,function(){boardEl.textContent="";var li=document.createElement("li");li.className="empty";li.style.display="block";li.textContent="Die Bestenliste kann gerade nicht geladen werden.";boardEl.appendChild(li);});}catch(e){}
+}
+function initDb(){
+  if(window.claude&&claude.use){claude.use("db").then(pick,function(){pick(null);});}
+  else pick(null);
+}
+function frame(now){
+  var dt=Math.min(0.1,(now-last)/1000);last=now;
+  acc+=dt*S.lv.caddie;
+  while(acc>=1){acc-=1;if(balls.length<12)putt();}
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+
+cv.addEventListener("pointerdown",function(e){e.preventDefault();putt();});
+document.getElementById("putt").addEventListener("click",putt);
+document.getElementById("reset").addEventListener("click",function(){
+  if(confirm("Spielstand wirklich löschen?")){S=norm({});dirty=true;save();update();}
+});
+setInterval(save,4000);
+window.addEventListener("pagehide",save);
+initDb();update();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
